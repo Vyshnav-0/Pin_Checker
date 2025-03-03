@@ -210,17 +210,14 @@ class PINChecker:
             return False
 
     def wait_with_countdown(self, seconds):
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(),
-        ) as progress:
-            task = progress.add_task(f"Waiting for timeout...", total=seconds)
-            for _ in range(seconds):
-                time.sleep(1)
-                progress.update(task, advance=1)
+        """Display a simple countdown timer without progress bar"""
+        self.log(f"Waiting for {seconds} seconds...", style="yellow")
+        for remaining in range(seconds, 0, -1):
+            sys.stdout.write(f"\rTime remaining: {remaining} seconds...")
+            sys.stdout.flush()
+            time.sleep(1)
+        sys.stdout.write("\rResuming PIN attempts...                 \n")
+        sys.stdout.flush()
 
     def check_all_pins(self):
         if not self.check_device_connected():
@@ -241,47 +238,61 @@ class PINChecker:
             return
 
         total_pins = 10000
-        with Progress(
-            SpinnerColumn(),
-            TextColumn("[progress.description]{task.description}"),
-            BarColumn(),
-            TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
-            TimeElapsedColumn(),
-        ) as progress:
-            task = progress.add_task("Testing PINs...", total=total_pins)
-            
-            for pin in range(total_pins):
-                formatted_pin = str(pin).zfill(4)
-                progress.update(task, description=f"Testing PIN: {formatted_pin}")
-                
-                if not self.enter_pin(formatted_pin):
-                    self.log(f"Failed to enter PIN: {formatted_pin}", style="red")
-                    time.sleep(1)
-                    continue
-                
-                self.attempts += 1
-
-                if self.check_if_unlocked():
-                    elapsed_time = datetime.now() - self.start_time
-                    self.console.print(Panel.fit(
-                        f"[green]SUCCESS! PIN found: {formatted_pin}[/green]\n"
-                        f"Time elapsed: {elapsed_time}\n"
-                        f"Total attempts: {self.attempts}"
-                    ))
-                    return formatted_pin
-                
-                if self.attempts % 5 == 0:
-                    self.log(f"Pausing after {self.attempts} attempts...", style="yellow")
-                    self.wait_with_countdown(30)
-                
-                progress.update(task, advance=1)
+        current_attempt = 0
         
-        elapsed_time = datetime.now() - self.start_time
-        self.console.print(Panel.fit(
-            "[red]PIN check completed - No matching PIN found[/red]\n"
-            f"Time elapsed: {elapsed_time}\n"
-            f"Total attempts: {self.attempts}"
-        ))
+        try:
+            with Progress(
+                SpinnerColumn(),
+                TextColumn("[progress.description]{task.description}"),
+                BarColumn(),
+                TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
+                TimeElapsedColumn(),
+                refresh_per_second=1  # Reduce refresh rate
+            ) as progress:
+                task = progress.add_task("Testing PINs...", total=total_pins)
+                
+                for pin in range(total_pins):
+                    formatted_pin = str(pin).zfill(4)
+                    progress.update(task, description=f"Testing PIN: {formatted_pin}")
+                    
+                    if not self.enter_pin(formatted_pin):
+                        self.log(f"Failed to enter PIN: {formatted_pin}", style="red")
+                        time.sleep(1)
+                        continue
+                    
+                    current_attempt += 1
+                    self.attempts = current_attempt
+
+                    if self.check_if_unlocked():
+                        elapsed_time = datetime.now() - self.start_time
+                        self.console.print(Panel.fit(
+                            f"[green]SUCCESS! PIN found: {formatted_pin}[/green]\n"
+                            f"Time elapsed: {elapsed_time}\n"
+                            f"Total attempts: {self.attempts}"
+                        ))
+                        return formatted_pin
+                    
+                    # Pause every 5 attempts
+                    if current_attempt % 5 == 0:
+                        # Clear the progress bar temporarily
+                        progress.stop()
+                        self.wait_with_countdown(30)
+                        progress.start()
+                    
+                    progress.update(task, advance=1)
+                    time.sleep(0.1)  # Small delay between attempts
+            
+            # Show final results
+            elapsed_time = datetime.now() - self.start_time
+            self.console.print(Panel.fit(
+                "[red]PIN check completed - No matching PIN found[/red]\n"
+                f"Time elapsed: {elapsed_time}\n"
+                f"Total attempts: {self.attempts}"
+            ))
+            
+        except Exception as e:
+            self.log(f"Error during PIN checking: {str(e)}", style="red")
+            return None
 
 def main():
     try:
