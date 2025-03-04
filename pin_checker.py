@@ -333,6 +333,67 @@ class PINChecker:
         except CalledProcessError:
             return False
 
+    def handle_usb_data_access(self):
+        """Handle USB data access permissions automatically"""
+        try:
+            self.log("Setting up USB data access...", style="blue")
+            
+            # Try multiple methods to enable USB data access
+            methods = [
+                ['adb', 'shell', 'settings', 'put', 'global', 'usb_mass_storage_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'usb_mass_storage_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'system', 'usb_mass_storage_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'global', 'usb_mass_storage_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'usb_mass_storage_enabled', '1']
+            ]
+            
+            for method in methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
+            
+            # Try to set USB mode to MTP (Media Transfer Protocol)
+            mtp_methods = [
+                ['adb', 'shell', 'svc', 'usb', 'setFunction', 'mtp'],
+                ['adb', 'shell', 'setprop', 'sys.usb.config', 'mtp'],
+                ['adb', 'shell', 'setprop', 'sys.usb.state', 'mtp']
+            ]
+            
+            for method in mtp_methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
+            
+            # Try to set USB mode to MTP+ADB
+            mtp_adb_methods = [
+                ['adb', 'shell', 'svc', 'usb', 'setFunction', 'mtp,adb'],
+                ['adb', 'shell', 'setprop', 'sys.usb.config', 'mtp,adb'],
+                ['adb', 'shell', 'setprop', 'sys.usb.state', 'mtp,adb']
+            ]
+            
+            for method in mtp_adb_methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
+            
+            # Restart ADB server to apply changes
+            run(['adb', 'kill-server'], check=True)
+            time.sleep(1)
+            run(['adb', 'start-server'], check=True)
+            time.sleep(2)
+            
+            self.log("USB data access enabled successfully", style="green")
+            return True
+        except Exception as e:
+            self.log(f"Failed to enable USB data access: {e}", style="red")
+            return False
+
     def setup_checks(self):
         """Perform all initial setup checks with better error handling"""
         self.log("Starting initial checks...", style="blue")
@@ -377,6 +438,11 @@ class PINChecker:
                 if not self.handle_usb_authorization():
                     self.log("Failed to authorize device", style="red")
                     return False
+
+            # Handle USB data access
+            if not self.handle_usb_data_access():
+                self.log("Failed to enable USB data access", style="red")
+                return False
 
             # Try to get screen size
             self.get_screen_size()
