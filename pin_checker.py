@@ -56,26 +56,72 @@ class PINChecker:
             self.log(f"Error output: {e.stderr.decode() if e.stderr else e.stdout.decode()}", style="red")
             return False
 
+    def enable_developer_mode(self):
+        """Enable developer mode automatically"""
+        try:
+            self.log("Attempting to enable developer mode...", style="blue")
+            
+            # Try multiple methods to enable developer mode
+            methods = [
+                ['adb', 'shell', 'settings', 'put', 'global', 'development_settings_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'development_settings_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'system', 'development_settings_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'global', 'development_settings_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'development_settings_enabled', '1']
+            ]
+            
+            for method in methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
+            
+            self.log("Developer mode enabled", style="green")
+            return True
+        except Exception as e:
+            self.log(f"Failed to enable developer mode: {e}", style="red")
+            return False
+
     def enable_usb_debugging(self):
         """Enable USB debugging on the device automatically"""
         try:
             self.log("Attempting to enable USB debugging...", style="blue")
             
-            # Try to enable developer options using alternative method
-            run(['adb', 'shell', 'settings', 'put', 'secure', 'development_settings_enabled', '1'], check=True)
-            time.sleep(1)
+            # First enable developer mode
+            if not self.enable_developer_mode():
+                self.log("Failed to enable developer mode", style="red")
+                return False
             
-            # Try to enable USB debugging using alternative method
-            run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_enabled', '1'], check=True)
-            time.sleep(1)
+            # Try multiple methods to enable USB debugging
+            methods = [
+                ['adb', 'shell', 'settings', 'put', 'global', 'adb_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'adb_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'system', 'adb_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'global', 'adb_enabled', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'adb_enabled', '1']
+            ]
+            
+            for method in methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
             
             # Try to set USB debugging to always allow
-            run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_always_allow', '1'], check=True)
-            time.sleep(1)
+            allow_methods = [
+                ['adb', 'shell', 'settings', 'put', 'global', 'adb_always_allow', '1'],
+                ['adb', 'shell', 'settings', 'put', 'secure', 'adb_always_allow', '1'],
+                ['adb', 'shell', 'settings', 'put', 'system', 'adb_always_allow', '1']
+            ]
             
-            # Try to set USB debugging to always allow (alternative method)
-            run(['adb', 'shell', 'settings', 'put', 'global', 'adb_always_allow', '1'], check=True)
-            time.sleep(1)
+            for method in allow_methods:
+                try:
+                    run(method, check=True)
+                    time.sleep(0.5)
+                except CalledProcessError:
+                    continue
             
             # Restart ADB server to apply changes
             run(['adb', 'kill-server'], check=True)
@@ -85,7 +131,7 @@ class PINChecker:
             
             self.log("USB debugging enabled successfully", style="green")
             return True
-        except CalledProcessError as e:
+        except Exception as e:
             self.log(f"Failed to enable USB debugging: {e}", style="red")
             return False
 
@@ -317,11 +363,7 @@ class PINChecker:
             if not self.check_device_connected():
                 self.console.print(Panel.fit(
                     "[red]No Android device connected![/red]\n\n"
-                    "Please ensure:\n"
-                    "1. Connect your device via USB\n"
-                    "2. Enable USB debugging in Developer options\n"
-                    "3. Accept the USB debugging prompt on your device\n"
-                    "4. Run 'adb devices' to verify connection"
+                    "Please connect your device via USB and try again."
                 ))
                 sys.exit(1)
 
@@ -454,14 +496,13 @@ def main():
         # Show initial instructions
         console.print(Panel.fit(
             "[yellow]Please ensure:[/yellow]\n\n"
-            "1. USB debugging is enabled on your phone\n"
-            "2. Phone is connected via USB\n"
-            "3. ADB is authorized on your phone\n\n"
-            "[blue]To enable USB debugging:[/blue]\n"
-            "1. Go to Settings > About phone\n"
-            "2. Tap Build number 7 times\n"
-            "3. Go to Settings > Developer options\n"
-            "4. Enable USB debugging"
+            "1. Phone is connected via USB\n"
+            "2. Wait for automatic setup to complete\n\n"
+            "[blue]Note:[/blue]\n"
+            "The script will automatically:\n"
+            "1. Enable developer mode\n"
+            "2. Enable USB debugging\n"
+            "3. Handle USB authorization"
         ))
         
         input("\nPress Enter when ready...")
