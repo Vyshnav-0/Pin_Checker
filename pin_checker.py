@@ -111,6 +111,24 @@ class PINChecker:
             self.log(f"Error getting screen size: {str(e)}", style="red")
             return self.width, self.height
 
+    def wake_screen(self):
+        """Wake up the device screen and keep it on"""
+        try:
+            # Wake up device
+            run(['adb', 'shell', 'input', 'keyevent', '26'], check=True)
+            time.sleep(0.2)
+            
+            # Keep screen on
+            run(['adb', 'shell', 'svc', 'power', 'stayon', 'true'], check=True)
+            # Set screen timeout to 1 hour (3600000 ms)
+            run(['adb', 'shell', 'settings', 'put', 'system', 'screen_off_timeout', '3600000'], check=True)
+            
+            self.log("Screen woken and set to stay on", style="green")
+            return True
+        except CalledProcessError as e:
+            self.log(f"Error keeping screen on: {e}", style="red")
+            return False
+
     def initial_unlock(self):
         """Perform initial screen wake and unlock swipe."""
         try:
@@ -123,9 +141,8 @@ class PINChecker:
             end_y = int(height * 0.2)
             
             with console.status("[bold blue]Performing initial unlock sequence...", spinner="dots"):
-                # Wake up device
-                run(['adb', 'shell', 'input', 'keyevent', '26'], check=True)
-                time.sleep(1)
+                # Wake up device and keep screen on
+                self.wake_screen()
                 
                 # Swipe gestures
                 run(['adb', 'shell', 'input', 'swipe', 
@@ -139,16 +156,6 @@ class PINChecker:
             return True
         except CalledProcessError as e:
             self.log(f"Error during initial unlock: {e}", style="red")
-            return False
-
-    def wake_screen(self):
-        """Wake up the device screen"""
-        try:
-            run(['adb', 'shell', 'input', 'keyevent', '26'], check=True)
-            time.sleep(0.2)  # Reduced from 1 to 0.2
-            return True
-        except CalledProcessError as e:
-            self.log(f"Error waking screen: {e}", style="red")
             return False
 
     def swipe_up(self):
@@ -268,7 +275,6 @@ class PINChecker:
         
         # Wake screen and perform initial unlock
         self.log("Waking screen and performing initial unlock...", style="blue")
-        self.wake_screen()
         if not self.initial_unlock():
             self.log("Failed to perform initial unlock sequence", style="red")
             return
