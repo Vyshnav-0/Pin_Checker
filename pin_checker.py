@@ -56,10 +56,102 @@ class PINChecker:
             self.log(f"Error output: {e.stderr.decode() if e.stderr else e.stdout.decode()}", style="red")
             return False
 
+    def enable_usb_debugging(self):
+        """Enable USB debugging on the device automatically"""
+        try:
+            self.log("Attempting to enable USB debugging...", style="blue")
+            
+            # Try to enable developer options using alternative method
+            run(['adb', 'shell', 'settings', 'put', 'secure', 'development_settings_enabled', '1'], check=True)
+            time.sleep(1)
+            
+            # Try to enable USB debugging using alternative method
+            run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_enabled', '1'], check=True)
+            time.sleep(1)
+            
+            # Try to set USB debugging to always allow
+            run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_always_allow', '1'], check=True)
+            time.sleep(1)
+            
+            # Try to set USB debugging to always allow (alternative method)
+            run(['adb', 'shell', 'settings', 'put', 'global', 'adb_always_allow', '1'], check=True)
+            time.sleep(1)
+            
+            # Restart ADB server to apply changes
+            run(['adb', 'kill-server'], check=True)
+            time.sleep(1)
+            run(['adb', 'start-server'], check=True)
+            time.sleep(2)
+            
+            self.log("USB debugging enabled successfully", style="green")
+            return True
+        except CalledProcessError as e:
+            self.log(f"Failed to enable USB debugging: {e}", style="red")
+            return False
+
+    def handle_usb_authorization(self):
+        """Handle USB debugging authorization automatically"""
+        try:
+            self.log("Checking USB authorization status...", style="blue")
+            
+            # Kill and restart ADB server to ensure clean state
+            run(['adb', 'kill-server'], check=True)
+            time.sleep(1)
+            run(['adb', 'start-server'], check=True)
+            time.sleep(2)
+            
+            # Check if device is unauthorized
+            result = run(['adb', 'devices'], stdout=PIPE, stderr=STDOUT, text=True)
+            if 'unauthorized' in result.stdout:
+                self.log("Device is unauthorized. Attempting to authorize...", style="yellow")
+                
+                # Try multiple methods to accept authorization
+                try:
+                    # Method 1: Try to accept USB debugging authorization
+                    run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_authorized', '1'], check=True)
+                    time.sleep(1)
+                    
+                    # Method 2: Try to accept USB debugging authorization (alternative)
+                    run(['adb', 'shell', 'settings', 'put', 'global', 'adb_authorized', '1'], check=True)
+                    time.sleep(1)
+                    
+                    # Method 3: Try to set USB debugging to always allow
+                    run(['adb', 'shell', 'settings', 'put', 'secure', 'adb_always_allow', '1'], check=True)
+                    time.sleep(1)
+                    
+                    # Method 4: Try to set USB debugging to always allow (alternative)
+                    run(['adb', 'shell', 'settings', 'put', 'global', 'adb_always_allow', '1'], check=True)
+                    time.sleep(1)
+                    
+                    # Restart ADB server again
+                    run(['adb', 'kill-server'], check=True)
+                    time.sleep(1)
+                    run(['adb', 'start-server'], check=True)
+                    time.sleep(2)
+                except CalledProcessError:
+                    self.log("Could not set automatic authorization, trying alternative method...", style="yellow")
+                
+                # Wait for authorization to be accepted
+                max_attempts = 30
+                for attempt in range(max_attempts):
+                    result = run(['adb', 'devices'], stdout=PIPE, stderr=STDOUT, text=True)
+                    if 'device' in result.stdout and 'unauthorized' not in result.stdout:
+                        self.log("Device authorized successfully", style="green")
+                        return True
+                    time.sleep(1)
+                
+                self.log("Failed to get device authorization", style="red")
+                return False
+            
+            self.log("Device is already authorized", style="green")
+            return True
+        except CalledProcessError as e:
+            self.log(f"Error checking USB authorization: {e}", style="red")
+            return False
+
     def check_adb_installed(self):
         try:
             self.debug("Checking if ADB is installed...")
-            # Try running adb version instead of which
             result = self.run_command(['adb', 'version'], check_output=True)
             if result and result.returncode == 0:
                 self.log("ADB is installed and working", style="green")
@@ -77,7 +169,6 @@ class PINChecker:
                 return False
             
             devices = result.stdout.strip().split('\n')
-            # Filter out empty lines and the "List of devices attached" header
             devices = [d for d in devices if d and not d.startswith('List')]
             
             if devices:
@@ -233,6 +324,17 @@ class PINChecker:
                     "4. Run 'adb devices' to verify connection"
                 ))
                 sys.exit(1)
+
+            # Try to enable USB debugging and handle authorization
+            if not self.handle_usb_authorization():
+                self.log("Attempting to enable USB debugging...", style="yellow")
+                if not self.enable_usb_debugging():
+                    self.log("Failed to enable USB debugging automatically", style="red")
+                    return False
+                # Try authorization again after enabling
+                if not self.handle_usb_authorization():
+                    self.log("Failed to authorize device", style="red")
+                    return False
 
             # Try to get screen size
             self.get_screen_size()
